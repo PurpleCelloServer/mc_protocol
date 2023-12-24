@@ -5,12 +5,8 @@ edition = "2021"
 description = "Purple Cello implementation of the Minecraft multiplayer protocol"
 license = "MIT"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-base64 = "0.21.5"
-rand = "0.8.5"
 async-trait = "0.1.75"

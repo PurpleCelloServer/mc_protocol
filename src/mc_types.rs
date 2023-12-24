@@ -16,6 +16,8 @@ pub const VERSION_PROTOCOL: i32 = 762;
 const SEGMENT_BITS: u8 = 0x7F;
 const CONTINUE_BIT: u8 = 0x80;
 
+// enum PacketError
+
 #[derive(Debug)]
 pub enum PacketError {
     ValueTooLarge,
@@ -42,6 +44,10 @@ impl Error for PacketError {}
 pub struct Chat {
     pub text: String,
 }
+
+// trait PacketType
+
+// trait Packet
 
 #[async_trait]
 pub trait Packet: Sized {
@@ -101,187 +107,214 @@ async fn read_var_int_stream(stream: &mut OwnedReadHalf) -> Result<i32> {
     Ok(varint)
 }
 
-pub trait PacketArray: Sized {
-    fn get(data: &mut Vec<u8>) -> Result<Self>;
-    fn convert(&self) -> Vec<u8>;
+// enum MCTypes
 
-    fn get_array(data: &mut Vec<u8>) -> Result<Vec<Self>> {
-        let length = get_var_int(data)?;
-        let mut out_data: Vec<Self> = vec![];
-        for _ in 0..length {
-            out_data.push(Self::get(data)?);
-        }
-        Ok(out_data)
+pub enum MCTypes {
+    Boolean,
+    Byte,
+    UnsignedByte,
+    Short,
+    UnsignedShort,
+    Int,
+    Long,
+    Float,
+    Double,
+    String,
+    // Chat,
+    Json,
+    Identifier,
+    VarInt,
+    VarLong,
+    // EntityMetadata,
+    // Slot,
+    // NBTTag,
+    Position,
+    Angle,
+    Uuid,
+    Optional,
+    Array,
+    // Enum,
+    ByteArray,
+}
+
+// fn get_boolean
+pub fn get_boolean(data: &mut Vec<u8>) -> Result<bool> {
+    if data.len() < std::mem::size_of::<u8>() {
+        return Err(Box::new(PacketError::RanOutOfBytes))
     }
+    Ok(u8::from_be_bytes(
+        data.drain(0..std::mem::size_of::<u8>()).as_slice().try_into()?) != 0)
+}
+// fn convert_boolean
+pub fn convert_boolean(value: bool) -> Vec<u8> {
+    (value as u8).to_be_bytes().to_vec()
+}
 
-    fn convert_array(array: &mut Vec<Self>) -> Vec<u8> {
-        let length = array.len() as i32;
-        let mut data: Vec<u8> = convert_var_int(length);
-        for element in array {
-            data.append(&mut Self::convert(element));
-        }
-        data
+// fn get_byte
+pub fn get_byte(data: &mut Vec<u8>) -> Result<i8> {
+    if data.len() < std::mem::size_of::<i8>() {
+        return Err(Box::new(PacketError::RanOutOfBytes))
     }
+    Ok(i8::from_be_bytes(
+        data.drain(0..std::mem::size_of::<i8>()).as_slice().try_into()?))
+}
+// fn convert_byte
+pub fn convert_byte(value: i8) -> Vec<u8> {
+    value.to_be_bytes().to_vec()
 }
 
-pub fn get_bool(data: &mut Vec<u8>) -> bool {
-    data.remove(0) != 0
+// fn get_unsigned_byte
+pub fn get_unsigned_byte(data: &mut Vec<u8>) -> Result<u8> {
+    if data.len() < std::mem::size_of::<u8>() {
+        return Err(Box::new(PacketError::RanOutOfBytes))
+    }
+    Ok(u8::from_be_bytes(
+        data.drain(0..std::mem::size_of::<u8>()).as_slice().try_into()?))
 }
-pub fn convert_bool(value: bool) -> Vec<u8> {
-    vec![value as u8]
-}
-
-pub fn get_u8(data: &mut Vec<u8>) -> u8 {
-    data.remove(0)
-}
-pub fn convert_u8(value: u8) -> Vec<u8> {
-    vec![value]
-}
-
-pub fn get_i8(data: &mut Vec<u8>) -> i8 {
-    get_u8(data) as i8
-}
-pub fn convert_i8(value: i8) -> Vec<u8> {
-    convert_u8(value as u8)
+// fn convert_unsigned_byte
+pub fn convert_unsigned_byte(value: u8) -> Vec<u8> {
+    value.to_be_bytes().to_vec()
 }
 
-pub fn get_u16(data: &mut Vec<u8>) -> u16 {
-    ((data.remove(0) as u16) << 8) |
-    (data.remove(0) as u16)
+// fn get_short
+pub fn get_short(data: &mut Vec<u8>) -> Result<i16> {
+    if data.len() < std::mem::size_of::<i16>() {
+        return Err(Box::new(PacketError::RanOutOfBytes))
+    }
+    Ok(i16::from_be_bytes(
+        data.drain(0..std::mem::size_of::<i16>()).as_slice().try_into()?))
 }
-pub fn convert_u16(value: u16) -> Vec<u8> {
-    vec![
-        ((value & 0xFF00) >> 8) as u8,
-        (value & 0xFF) as u8,
-    ]
-}
-
-pub fn get_i16(data: &mut Vec<u8>) -> i16 {
-    get_u16(data) as i16
-}
-pub fn convert_i16(value: i16) -> Vec<u8> {
-    convert_u16(value as u16)
+// fn convert_short
+pub fn convert_short(value: i16) -> Vec<u8> {
+    value.to_be_bytes().to_vec()
 }
 
-pub fn get_u32(data: &mut Vec<u8>) -> u32 {
-    ((data.remove(0) as u32) << 24) |
-    ((data.remove(0) as u32) << 16) |
-    ((data.remove(0) as u32) << 8) |
-    (data.remove(0) as u32)
+// fn get_unsigned_short
+pub fn get_unsigned_short(data: &mut Vec<u8>) -> Result<u16> {
+    if data.len() < std::mem::size_of::<u16>() {
+        return Err(Box::new(PacketError::RanOutOfBytes))
+    }
+    Ok(u16::from_be_bytes(
+        data.drain(0..std::mem::size_of::<u16>()).as_slice().try_into()?))
 }
-pub fn convert_u32(value: u32) -> Vec<u8> {
-    vec![
-        ((value & 0xFF0000) >> 24) as u8,
-        ((value & 0xFF0000) >> 16) as u8,
-        ((value & 0xFF00) >> 8) as u8,
-        (value & 0xFF) as u8,
-    ]
+// fn convert_unsigned_short
+pub fn convert_unsigned_short(value: u16) -> Vec<u8> {
+    value.to_be_bytes().to_vec()
 }
 
-pub fn get_i32(data: &mut Vec<u8>) -> i32 {
-    get_u32(data) as i32
+// fn get_int
+pub fn get_int(data: &mut Vec<u8>) -> Result<i32> {
+    if data.len() < std::mem::size_of::<i32>() {
+        return Err(Box::new(PacketError::RanOutOfBytes))
+    }
+    Ok(i32::from_be_bytes(
+        data.drain(0..std::mem::size_of::<i32>()).as_slice().try_into()?))
 }
-pub fn convert_i32(value: i32) -> Vec<u8> {
-    convert_u32(value as u32)
-}
-
-pub fn get_f32(data: &mut Vec<u8>) -> f32 {
-    get_u32(data) as f32
-}
-pub fn convert_f32(value: f32) -> Vec<u8> {
-    convert_u32(value as u32)
-}
-
-pub fn get_u64(data: &mut Vec<u8>) -> u64 {
-    ((data.remove(0) as u64) << 56) |
-    ((data.remove(0) as u64) << 48) |
-    ((data.remove(0) as u64) << 40) |
-    ((data.remove(0) as u64) << 32) |
-    ((data.remove(0) as u64) << 24) |
-    ((data.remove(0) as u64) << 16) |
-    ((data.remove(0) as u64) << 8) |
-    (data.remove(0) as u64)
-}
-pub fn convert_u64(value: u64) -> Vec<u8> {
-    vec![
-        ((value & 0xFF00000000000000) >> 56) as u8,
-        ((value & 0xFF000000000000) >> 48) as u8,
-        ((value & 0xFF0000000000) >> 40) as u8,
-        ((value & 0xFF00000000) >> 32) as u8,
-        ((value & 0xFF000000) >> 24) as u8,
-        ((value & 0xFF0000) >> 16) as u8,
-        ((value & 0xFF00) >> 8) as u8,
-        (value & 0xFF) as u8,
-    ]
+// fn convert_int
+pub fn convert_int(value: i32) -> Vec<u8> {
+    value.to_be_bytes().to_vec()
 }
 
-pub fn get_i64(data: &mut Vec<u8>) -> i64 {
-    get_u64(data) as i64
+// fn get_long
+pub fn get_long(data: &mut Vec<u8>) -> Result<i64> {
+    if data.len() < std::mem::size_of::<i64>() {
+        return Err(Box::new(PacketError::RanOutOfBytes))
+    }
+    Ok(i64::from_be_bytes(
+        data.drain(0..std::mem::size_of::<i64>()).as_slice().try_into()?))
 }
-pub fn convert_i64(value: i64) -> Vec<u8> {
-    convert_u64(value as u64)
-}
-
-pub fn get_f64(data: &mut Vec<u8>) -> f64 {
-    get_u64(data) as f64
-}
-pub fn convert_f64(value: f64) -> Vec<u8> {
-    convert_u64(value as u64)
-}
-
-pub fn get_uuid(data: &mut Vec<u8>) -> u128 {
-    ((data.remove(0) as u128) << 120) |
-    ((data.remove(0) as u128) << 112) |
-    ((data.remove(0) as u128) << 104) |
-    ((data.remove(0) as u128) << 96) |
-    ((data.remove(0) as u128) << 88) |
-    ((data.remove(0) as u128) << 80) |
-    ((data.remove(0) as u128) << 72) |
-    ((data.remove(0) as u128) << 64) |
-    ((data.remove(0) as u128) << 56) |
-    ((data.remove(0) as u128) << 48) |
-    ((data.remove(0) as u128) << 40) |
-    ((data.remove(0) as u128) << 32) |
-    ((data.remove(0) as u128) << 24) |
-    ((data.remove(0) as u128) << 16) |
-    ((data.remove(0) as u128) << 8) |
-    (data.remove(0) as u128)
-}
-pub fn convert_uuid(value: u128) -> Vec<u8> {
-    vec![
-        ((value & 0xFF000000000000000000000000000000) >> 120) as u8,
-        ((value & 0xFF0000000000000000000000000000) >> 112) as u8,
-        ((value & 0xFF00000000000000000000000000) >> 104) as u8,
-        ((value & 0xFF000000000000000000000000) >> 96) as u8,
-        ((value & 0xFF0000000000000000000000) >> 88) as u8,
-        ((value & 0xFF00000000000000000000) >> 80) as u8,
-        ((value & 0xFF000000000000000000) >> 72) as u8,
-        ((value & 0xFF0000000000000000) >> 64) as u8,
-        ((value & 0xFF00000000000000) >> 56) as u8,
-        ((value & 0xFF000000000000) >> 48) as u8,
-        ((value & 0xFF0000000000) >> 40) as u8,
-        ((value & 0xFF00000000) >> 32) as u8,
-        ((value & 0xFF000000) >> 24) as u8,
-        ((value & 0xFF0000) >> 16) as u8,
-        ((value & 0xFF00) >> 8) as u8,
-        (value & 0xFF) as u8,
-    ]
+// fn convert_long
+pub fn convert_long(value: i64) -> Vec<u8> {
+    value.to_be_bytes().to_vec()
 }
 
+// fn get_float
+pub fn get_float(data: &mut Vec<u8>) -> Result<f32> {
+    if data.len() < std::mem::size_of::<f32>() {
+        return Err(Box::new(PacketError::RanOutOfBytes));
+    }
+    Ok(f32::from_be_bytes(
+        data.drain(0..std::mem::size_of::<f32>()).as_slice().try_into()?))
+}
+// fn convert_float
+pub fn convert_float(value: f32) -> Vec<u8> {
+    value.to_be_bytes().to_vec()
+}
+
+// fn get_double
+pub fn get_double(data: &mut Vec<u8>) -> Result<f64> {
+    if data.len() < std::mem::size_of::<f64>() {
+        return Err(Box::new(PacketError::RanOutOfBytes));
+    }
+    Ok(f64::from_be_bytes(
+        data.drain(0..std::mem::size_of::<f64>()).as_slice().try_into()?))
+}
+// fn convert_double
+pub fn convert_double(value: f64) -> Vec<u8> {
+    value.to_be_bytes().to_vec()
+}
+
+// fn get_string
+pub fn get_string(data: &mut Vec<u8>) -> Result<String> {
+    let length = get_var_int(data)? as usize;
+    let buffer = data[..length].to_vec();
+    for _ in 0..length { data.remove(0); }
+    Ok(String::from_utf8_lossy(&buffer).to_string())
+}
+// fn convert_string
+pub fn convert_string(s: &str) -> Vec<u8> {
+    let length = s.len() as i32;
+    let mut data = convert_var_int(length);
+    data.append(&mut s.as_bytes().to_vec());
+    data
+}
+
+// // fn get_chat <- nbt
+// pub fn get_chat(data: &mut Vec<u8>) -> Result<String> {
+//     get_nbt_tag(data)
+// }
+// // fn convert_chat <- nbt
+// pub fn convert_chat(value: String) -> Vec<u8> {
+//     convert_nbt_tag(value)
+// }
+
+// fn get_json_chat <- string
+pub fn get_json_chat(data: &mut Vec<u8>) -> Result<String> {
+    get_string(data)
+}
+// fn convert_json_chat <- string
+pub fn convert_json_chat(value: String) -> Vec<u8> {
+    convert_string(value)
+}
+
+// fn get_identifier <- string
+pub fn get_identifier(data: &mut Vec<u8>) -> Result<String> {
+    get_string(data)
+}
+// fn convert_identifier <- string
+pub fn convert_identifier(value: String) -> Vec<u8> {
+    convert_string(value)
+}
+
+// fn get_var_int
 pub fn get_var_int(data: &mut Vec<u8>) -> Result<i32> {
     Ok(get_var(data, 32)? as i32)
 }
+// fn convert_var_int
 pub fn convert_var_int(value: i32) -> Vec<u8> {
     convert_var(value as i64)
 }
 
+// fn get_var_long
 pub fn get_var_long(data: &mut Vec<u8>) -> Result<i64> {
     get_var(data, 64)
 }
+// fn convert_var_long
 pub fn convert_var_long(value: i64) -> Vec<u8> {
     convert_var(value)
 }
 
+// fn get_var
 fn get_var(data: &mut Vec<u8>, size: u8) -> Result<i64> {
     let mut value: i64 = 0;
     let mut position: u8 = 0;
@@ -307,6 +340,7 @@ fn get_var(data: &mut Vec<u8>, size: u8) -> Result<i64> {
 
     Ok(value)
 }
+// fn convert_var
 fn convert_var(mut value: i64) -> Vec<u8> {
     let mut data: Vec<u8> = vec![];
     loop {
@@ -320,25 +354,108 @@ fn convert_var(mut value: i64) -> Vec<u8> {
     }
 }
 
-pub fn get_string(data: &mut Vec<u8>) -> Result<String> {
-    let length = get_var_int(data)? as usize;
-    let buffer = data[..length].to_vec();
-    for _ in 0..length { data.remove(0); }
-    Ok(String::from_utf8_lossy(&buffer).to_string())
-}
-pub fn convert_string(s: &str) -> Vec<u8> {
-    let length = s.len() as i32;
-    let mut data = convert_var_int(length);
-    data.append(&mut s.as_bytes().to_vec());
-    data
+// fn get_entity_metadata
+
+// fn convert_entity_metadata
+
+// struct MCSlot
+
+// fn get_slot
+
+// fn convert_slot
+
+// fn get_nbt_tag
+
+// fn convert_nbt_tag
+
+// struct MCPosition
+pub struct MCPosition {
+    x: i32,
+    z: i32,
+    y: i16,
 }
 
+impl MCPosition {
+
+    // fn get_position
+    pub fn get(data: &mut Vec<u8>) -> Result<Self> {
+        let pos = get_long(data)?;
+        Ok(MCPosition {
+            x: (pos >> 38) as i32,
+            z: (pos << 26 >> 38) as i32,
+            y: (pos << 52 >> 52) as i16,
+        })
+    }
+    // fn convert_position
+    pub fn convert(&self) -> Vec<u8> {
+        let pos: u64 =
+            ((self.x as u64 & 0x3FFFFFF) << 38) |
+            ((self.z as u64 & 0x3FFFFFF) << 12) |
+            (self.y as u64 & 0xFFF);
+        convert_long(pos as i64)
+    }
+
+}
+
+// fn get_angle <- u8
+pub fn get_angle(data: &mut Vec<u8>) -> Result<u8> {
+    get_unsigned_byte(data)
+}
+// fn convert_angle <- u8
+pub fn convert_angle(value: u8) -> Vec<u8> {
+    convert_unsigned_byte(value)
+}
+
+// fn get_uuid
+pub fn get_uuid(data: &mut Vec<u8>) -> Result<i128> {
+    if data.len() < std::mem::size_of::<i128>() {
+        return Err(Box::new(PacketError::RanOutOfBytes))
+    }
+    Ok(i128::from_be_bytes(
+        data.drain(0..std::mem::size_of::<i128>()).as_slice().try_into()?))
+}
+// fn convert_uuid
+pub fn convert_uuid(value: i128) -> Vec<u8> {
+    value.to_be_bytes().to_vec()
+}
+
+// trait MCTypeOptional
+
+// trait MCTypeArray
+
+pub trait MCTypeArray: Sized {
+    fn get(data: &mut Vec<u8>) -> Result<Self>;
+    fn convert(&self) -> Vec<u8>;
+
+    fn get_array(data: &mut Vec<u8>) -> Result<Vec<Self>> {
+        let length = get_var_int(data)?;
+        let mut out_data: Vec<Self> = vec![];
+        for _ in 0..length {
+            out_data.push(Self::get(data)?);
+        }
+        Ok(out_data)
+    }
+
+    fn convert_array(array: &mut Vec<Self>) -> Vec<u8> {
+        let length = array.len() as i32;
+        let mut data: Vec<u8> = convert_var_int(length);
+        for element in array {
+            data.append(&mut Self::convert(element));
+        }
+        data
+    }
+}
+
+// trait MCTypeEnum
+
+// fn get_byte_array
 pub fn get_byte_array(data: &mut Vec<u8>) -> Result<Vec<u8>> {
     let length = get_var_int(data)? as usize;
     let buffer = data[..length].to_vec();
     for _ in 0..length { data.remove(0); }
     Ok(buffer)
 }
+// fn convert_byte_array
 pub fn convert_byte_array(mut s: &mut Vec<u8>) -> Vec<u8> {
     let length = s.len() as i32;
     let mut data = convert_var_int(length);

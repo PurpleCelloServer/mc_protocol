@@ -1,0 +1,13 @@
+[package]
+name = "purple_cello_mc_protocol_derive"
+version = "0.1.0"
+edition = "2021"
+description = "Macros for Purple Cello implementation of the Minecraft multiplayer protocol"
+license = "MIT"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "1.0"
+quote = "1.0"
