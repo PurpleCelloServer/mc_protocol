@@ -4,7 +4,7 @@ pub mod clientbound {
 
     use tokio::net::tcp::OwnedReadHalf;
 
-    use crate::mc_types::{self, Result, Packet, PacketArray, PacketError};
+    use crate::mc_types::{self, Result, Packet, MCTypeArray, PacketError};
 
     pub enum Login {
         Disconnect(Disconnect),
@@ -97,7 +97,7 @@ pub mod clientbound {
 
         fn get(mut data: &mut Vec<u8>) -> Result<Self> {
             Ok(Self {
-                uuid: mc_types::get_uuid(&mut data),
+                uuid: mc_types::get_uuid(&mut data)?,
                 username: mc_types::get_string(&mut data)?,
                 properties: LoginSuccessProperty::get_array(&mut data)?,
             })
@@ -132,12 +132,12 @@ pub mod clientbound {
         }
     }
 
-    impl PacketArray for LoginSuccessProperty {
+    impl MCTypeArray for LoginSuccessProperty {
 
         fn get(mut data: &mut Vec<u8>) -> Result<Self> {
             let name = mc_types::get_string(&mut data)?;
             let value = mc_types::get_string(&mut data)?;
-            let is_signed = mc_types::get_bool(&mut data);
+            let is_signed = mc_types::get_boolean(&mut data)?;
             let mut signature: Option<String> = None;
             if is_signed {
                 signature = Some(mc_types::get_string(&mut data)?);
@@ -155,10 +155,10 @@ pub mod clientbound {
             data.append(&mut mc_types::convert_string(&self.value));
             match &self.signature {
                 Some(value) => {
-                    data.append(&mut &mut mc_types::convert_bool(true));
+                    data.append(&mut &mut mc_types::convert_boolean(true));
                     data.append(&mut mc_types::convert_string(&value));
                 },
-                None => data.append(&mut &mut mc_types::convert_bool(false))
+                None => data.append(&mut &mut mc_types::convert_boolean(false))
             }
 
             data

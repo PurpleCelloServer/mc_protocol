@@ -109,6 +109,25 @@ async fn read_var_int_stream(stream: &mut OwnedReadHalf) -> Result<i32> {
 
 // enum MCTypes
 
+// pub enum MCTypes {
+//     Boolean,
+//     Byte,
+//     UnsignedByte,
+//     Short,
+//     UnsignedShort,
+//     Int,
+//     Long,
+//     Float,
+//     Double,
+//     String,
+//     VarInt,
+//     VarLong,
+//     Uuid,
+//     Optional,
+//     Array,
+//     ByteArray,
+// }
+
 pub enum MCTypes {
     Boolean,
     Byte,
@@ -131,8 +150,8 @@ pub enum MCTypes {
     Position,
     Angle,
     Uuid,
-    Optional,
-    Array,
+    // Optional,
+    // Array,
     // Enum,
     ByteArray,
 }
@@ -278,24 +297,6 @@ pub fn convert_string(s: &str) -> Vec<u8> {
 //     convert_nbt_tag(value)
 // }
 
-// fn get_json_chat <- string
-pub fn get_json_chat(data: &mut Vec<u8>) -> Result<String> {
-    get_string(data)
-}
-// fn convert_json_chat <- string
-pub fn convert_json_chat(value: String) -> Vec<u8> {
-    convert_string(value)
-}
-
-// fn get_identifier <- string
-pub fn get_identifier(data: &mut Vec<u8>) -> Result<String> {
-    get_string(data)
-}
-// fn convert_identifier <- string
-pub fn convert_identifier(value: String) -> Vec<u8> {
-    convert_string(value)
-}
-
 // fn get_var_int
 pub fn get_var_int(data: &mut Vec<u8>) -> Result<i32> {
     Ok(get_var(data, 32)? as i32)
@@ -374,48 +375,34 @@ pub struct MCPosition {
     z: i32,
     y: i16,
 }
-
-impl MCPosition {
-
-    // fn get_position
-    pub fn get(data: &mut Vec<u8>) -> Result<Self> {
-        let pos = get_long(data)?;
-        Ok(MCPosition {
-            x: (pos >> 38) as i32,
-            z: (pos << 26 >> 38) as i32,
-            y: (pos << 52 >> 52) as i16,
-        })
-    }
-    // fn convert_position
-    pub fn convert(&self) -> Vec<u8> {
-        let pos: u64 =
-            ((self.x as u64 & 0x3FFFFFF) << 38) |
-            ((self.z as u64 & 0x3FFFFFF) << 12) |
-            (self.y as u64 & 0xFFF);
-        convert_long(pos as i64)
-    }
-
+// fn get_position
+pub fn get_position(data: &mut Vec<u8>) -> Result<MCPosition> {
+    let pos = get_long(data)?;
+    Ok(MCPosition {
+        x: (pos >> 38) as i32,
+        z: (pos << 26 >> 38) as i32,
+        y: (pos << 52 >> 52) as i16,
+    })
 }
-
-// fn get_angle <- u8
-pub fn get_angle(data: &mut Vec<u8>) -> Result<u8> {
-    get_unsigned_byte(data)
-}
-// fn convert_angle <- u8
-pub fn convert_angle(value: u8) -> Vec<u8> {
-    convert_unsigned_byte(value)
+// fn convert_position
+pub fn convert_position(value: MCPosition) -> Vec<u8> {
+    let pos: u64 =
+        ((value.x as u64 & 0x3FFFFFF) << 38) |
+        ((value.z as u64 & 0x3FFFFFF) << 12) |
+        (value.y as u64 & 0xFFF);
+    convert_long(pos as i64)
 }
 
 // fn get_uuid
-pub fn get_uuid(data: &mut Vec<u8>) -> Result<i128> {
-    if data.len() < std::mem::size_of::<i128>() {
+pub fn get_uuid(data: &mut Vec<u8>) -> Result<u128> {
+    if data.len() < std::mem::size_of::<u128>() {
         return Err(Box::new(PacketError::RanOutOfBytes))
     }
-    Ok(i128::from_be_bytes(
-        data.drain(0..std::mem::size_of::<i128>()).as_slice().try_into()?))
+    Ok(u128::from_be_bytes(
+        data.drain(0..std::mem::size_of::<u128>()).as_slice().try_into()?))
 }
 // fn convert_uuid
-pub fn convert_uuid(value: i128) -> Vec<u8> {
+pub fn convert_uuid(value: u128) -> Vec<u8> {
     value.to_be_bytes().to_vec()
 }
 

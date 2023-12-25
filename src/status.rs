@@ -107,14 +107,14 @@ pub mod clientbound {
 
         fn get(mut data: &mut Vec<u8>) -> Result<Self> {
             Ok(Self {
-                payload: mc_types::get_i64(&mut data)
+                payload: mc_types::get_long(&mut data)?
             })
         }
 
         fn convert(&self) -> Vec<u8> {
             let mut data: Vec<u8> = vec![];
             data.append(&mut mc_types::convert_var_int(Self::packet_id()));
-            data.append(&mut mc_types::convert_i64(self.payload));
+            data.append(&mut mc_types::convert_long(self.payload));
 
             data
         }
@@ -177,14 +177,14 @@ pub mod serverbound {
 
         fn get(mut data: &mut Vec<u8>) -> Result<Self> {
             Ok(Self {
-                payload: mc_types::get_i64(&mut data)
+                payload: mc_types::get_long(&mut data)?
             })
         }
 
         fn convert(&self) -> Vec<u8> {
             let mut data: Vec<u8> = vec![];
             data.append(&mut mc_types::convert_var_int(Self::packet_id()));
-            data.append(&mut mc_types::convert_i64(self.payload));
+            data.append(&mut mc_types::convert_long(self.payload));
 
             data
         }
