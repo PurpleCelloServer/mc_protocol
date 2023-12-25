@@ -239,6 +239,7 @@ pub mod serverbound {
     pub enum Login {
         LoginStart(LoginStart),
         EncryptionResponse(EncryptionResponse),
+        PluginResponse(PluginResponse),
     }
 
     impl Login {
@@ -250,6 +251,9 @@ pub mod serverbound {
             } else if packet_id == EncryptionResponse::packet_id() {
                 return Ok(Self::EncryptionResponse(
                     EncryptionResponse::get(&mut data)?))
+            } else if packet_id == PluginResponse::packet_id() {
+                return Ok(Self::PluginResponse(
+                    PluginResponse::get(&mut data)?))
             } else {
                 return Err(Box::new(PacketError::InvalidPacketId))
             }
