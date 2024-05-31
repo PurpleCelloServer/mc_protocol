@@ -1,3 +1,4 @@
 /target
+Cargo.lock
 /.vscode
 /purple_cello_mc_protocol_derive/target
