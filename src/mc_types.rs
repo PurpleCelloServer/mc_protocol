@@ -62,6 +62,20 @@ pub struct ProtocolConnection<'a> {
 }
 
 impl<'a> ProtocolConnection<'a> {
+    pub fn new(
+        stream_read: &'a mut OwnedReadHalf,
+        stream_write: &'a mut OwnedWriteHalf,
+    ) -> Self {
+        ProtocolConnection {
+            stream_read,
+            stream_write,
+            rsa_private_key: None,
+            rsa_public_key: None,
+            aes_encryption_key: None,
+            verify_token: None,
+        }
+    }
+
     pub async fn read_data(&mut self) -> Result<Vec<u8>> {
         match self.aes_encryption_key {
             Some(aes_key) => {
