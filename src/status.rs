@@ -2,7 +2,6 @@
 
 pub mod clientbound {
 
-    use tokio::net::tcp::OwnedReadHalf;
     use serde::{Serialize, Deserialize};
 
     use crate::mc_types::{self, Result, Packet, PacketError};
@@ -46,8 +45,10 @@ pub mod clientbound {
     }
 
     impl StatusPackets {
-        pub async fn read(stream: &mut OwnedReadHalf) -> Result<Self> {
-            let mut data = mc_types::read_data(stream).await?;
+        pub async fn read(
+            conn: &mut mc_types::ProtocolConnection<'_>,
+        ) -> Result<Self> {
+            let mut data = conn.read_data().await?;
             let packet_id = mc_types::get_var_int(&mut data)?;
             if packet_id == Status::packet_id() {
                 return Ok(Self::Status(Status::get(&mut data)?))
@@ -125,8 +126,6 @@ pub mod clientbound {
 
 pub mod serverbound {
 
-    use tokio::net::tcp::OwnedReadHalf;
-
     use crate::mc_types::{self, Result, Packet, PacketError};
 
     pub enum StatusPackets {
@@ -135,8 +134,10 @@ pub mod serverbound {
     }
 
     impl StatusPackets {
-        pub async fn read(stream: &mut OwnedReadHalf) -> Result<Self> {
-            let mut data = mc_types::read_data(stream).await?;
+        pub async fn read(
+            conn: &mut mc_types::ProtocolConnection<'_>,
+        ) -> Result<Self> {
+            let mut data = conn.read_data().await?;
             let packet_id = mc_types::get_var_int(&mut data)?;
             if packet_id == Status::packet_id() {
                 return Ok(Self::Status(Status::get(&mut data)?))

@@ -2,8 +2,6 @@
 
 pub mod clientbound {
 
-    use tokio::net::tcp::OwnedReadHalf;
-
     use crate::mc_types::{self, Result, Packet, PacketArray, PacketError};
 
     pub enum Login {
@@ -15,8 +13,10 @@ pub mod clientbound {
     }
 
     impl Login {
-        pub async fn read(stream: &mut OwnedReadHalf) -> Result<Self> {
-            let mut data = mc_types::read_data(stream).await?;
+        pub async fn read(
+            conn: &mut mc_types::ProtocolConnection<'_>,
+        ) -> Result<Self> {
+            let mut data = conn.read_data().await?;
             let packet_id = mc_types::get_var_int(&mut data)?;
             if packet_id == Disconnect::packet_id() {
                 return Ok(Self::Disconnect(Disconnect::get(&mut data)?))
@@ -232,8 +232,6 @@ pub mod clientbound {
 
 pub mod serverbound {
 
-    use tokio::net::tcp::OwnedReadHalf;
-
     use crate::mc_types::{self, Result, Packet, PacketError};
 
     pub enum Login {
@@ -243,8 +241,10 @@ pub mod serverbound {
     }
 
     impl Login {
-        pub async fn read(stream: &mut OwnedReadHalf) -> Result<Self> {
-            let mut data = mc_types::read_data(stream).await?;
+        pub async fn read(
+            conn: &mut mc_types::ProtocolConnection<'_>,
+        ) -> Result<Self> {
+            let mut data = conn.read_data().await?;
             let packet_id = mc_types::get_var_int(&mut data)?;
             if packet_id == LoginStart::packet_id() {
                 return Ok(Self::LoginStart(LoginStart::get(&mut data)?))

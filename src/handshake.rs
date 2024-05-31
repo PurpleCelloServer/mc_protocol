@@ -2,8 +2,6 @@
 
 pub mod serverbound {
 
-    use tokio::net::tcp::OwnedReadHalf;
-
     use crate::mc_types::{self, Result, Packet, PacketError};
 
     pub enum HandshakeEnum {
@@ -11,8 +9,10 @@ pub mod serverbound {
     }
 
     impl HandshakeEnum {
-        pub async fn read(stream: &mut OwnedReadHalf) -> Result<Self> {
-            let mut data = mc_types::read_data(stream).await?;
+        pub async fn read(
+            conn: &mut mc_types::ProtocolConnection<'_>,
+        ) -> Result<Self> {
+            let mut data = conn.read_data().await?;
             let packet_id = mc_types::get_var_int(&mut data)?;
             if packet_id == Handshake::packet_id() {
                 return Ok(Self::Handshake(Handshake::get(&mut data)?))

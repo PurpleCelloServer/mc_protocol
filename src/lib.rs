@@ -4,3 +4,5 @@ pub mod mc_types;
 pub mod handshake;
 pub mod status;
 pub mod login;
+pub mod encrypt;
+pub mod play;

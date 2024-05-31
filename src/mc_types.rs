@@ -7,6 +7,12 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
+use rsa::{RsaPrivateKey, RsaPublicKey};
+use rsa::pkcs8::{EncodePublicKey, DecodePublicKey};
+use rand::Rng;
+
+use crate::login;
+use crate::encrypt;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -21,6 +27,7 @@ pub enum PacketError {
     ValueTooLarge,
     RanOutOfBytes,
     InvalidPacketId,
+    EncryptionError,
 }
 
 impl fmt::Display for PacketError {
@@ -32,6 +39,8 @@ impl fmt::Display for PacketError {
                 write!(f, "Ran out of bytes while reading VarInt"),
             PacketError::InvalidPacketId =>
                 write!(f, "Invalid packet id"),
+            PacketError::EncryptionError =>
+                write!(f, "Encryption Error"),
         }
     }
 }
@@ -43,14 +52,185 @@ pub struct Chat {
     pub text: String,
 }
 
+pub struct ProtocolConnection<'a> {
+    pub stream_read: &'a mut OwnedReadHalf,
+    pub stream_write: &'a mut OwnedWriteHalf,
+    rsa_private_key: Option<RsaPrivateKey>,
+    rsa_public_key: Option<RsaPublicKey>,
+    aes_encryption_key: Option<[u8; 16]>,
+    verify_token: Option<[u8; 16]>,
+}
+
+impl<'a> ProtocolConnection<'a> {
+    pub async fn read_data(&mut self) -> Result<Vec<u8>> {
+        match self.aes_encryption_key {
+            Some(aes_key) => {
+                let mut buffer: Vec<u8> = vec![0; 16];
+                self.stream_read.read_exact(&mut buffer).await?;
+                buffer = encrypt::decrypt_aes(
+                    &aes_key, buffer[0..16].try_into().unwrap());
+                let raw_length = read_var_int_vec(&mut buffer)?;
+                let length =
+                    if (raw_length - buffer.len() as i32) % 16 == 0 {
+                        (raw_length - buffer.len() as i32) / 16
+                    } else {
+                        ((raw_length - buffer.len() as i32) / 16) + 1
+                    };
+
+                for _ in 0..length {
+                    let mut block: Vec<u8> = vec![0; 16];
+                    self.stream_read.read_exact(&mut block).await?;
+                    buffer.append(&mut block);
+                }
+
+                Ok(buffer)
+            },
+            None => {
+                let length = read_var_int_stream(
+                    self.stream_read).await? as usize;
+
+                let mut buffer: Vec<u8> = vec![0; length];
+                self.stream_read.read_exact(&mut buffer).await?;
+
+                Ok(buffer)
+            }
+        }
+    }
+
+    pub async fn write_data(
+        &mut self,
+        data: &mut Vec<u8>,
+    ) -> Result<()> {
+        let mut out_data = convert_var_int(data.len() as i32);
+        out_data.append(data);
+        match self.aes_encryption_key {
+            Some(aes_key) => {
+                let length =
+                    if (data.len() as i32) % 16 == 0 {
+                        (data.len() as i32) / 16
+                    } else {
+                        ((data.len() as i32) / 16) + 1
+                    };
+
+                for _ in 0..length {
+                    let mut block: Vec<u8> = out_data[0..16].to_vec();
+                    block = encrypt::encrypt_aes(
+                        &aes_key, block[0..16].try_into().unwrap());
+                    self.stream_write.write_all(&block).await?;
+                }
+
+
+                Ok(())
+            },
+            None => {
+                self.stream_write.write_all(&out_data).await?;
+
+                Ok(())
+            }
+        }
+    }
+
+    pub fn create_encryption_request(
+        &mut self,
+        private_key: RsaPrivateKey,
+    ) -> Result<login::clientbound::EncryptionRequest> {
+        match self.rsa_private_key {
+            Some(_) => {},
+            None => {
+                let public_key = RsaPublicKey::from(&private_key);
+                let mut rng = rand::thread_rng();
+                self.rsa_private_key = Some(private_key);
+                self.rsa_public_key = Some(public_key);
+                self.verify_token = Some(rng.gen());
+            }
+        };
+        match &self.rsa_public_key {
+            Some (key) => {
+                match &self.verify_token {
+                    Some (token) =>
+                        Ok(login::clientbound::EncryptionRequest {
+                            server_id: "".to_string(),
+                            public_key: key
+                                .to_public_key_der()?
+                                .as_ref()
+                                .to_vec(),
+                            verify_token: token[0..16].to_vec(),
+                        }),
+                    None => Err(Box::new(PacketError::EncryptionError))
+                }
+            },
+            None => Err(Box::new(PacketError::EncryptionError))
+        }
+    }
+
+    pub fn handle_encryption_request(
+        &mut self,
+        request: login::clientbound::EncryptionRequest,
+    ) -> Result<login::serverbound::EncryptionResponse> {
+        self.rsa_public_key = Some(
+            RsaPublicKey::from_public_key_der(&request.public_key)?);
+        let mut rng = rand::thread_rng();
+        self.aes_encryption_key = Some(rng.gen());
+        match self.aes_encryption_key {
+            Some(key) => {
+                match &self.rsa_public_key {
+                    Some(public_key) => {
+                        Ok(login::serverbound::EncryptionResponse {
+                            shared_secret: encrypt::encrypt_rsa(
+                                public_key, &key)?,
+                            verify_token: encrypt::encrypt_rsa(
+                                public_key,
+                                request.verify_token[0..16]
+                                    .try_into()
+                                    .unwrap(),
+                            )?,
+                        })
+                    },
+                    None => Err(Box::new(PacketError::EncryptionError))
+                }
+            },
+            None => Err(Box::new(PacketError::EncryptionError))
+        }
+    }
+
+    pub fn handle_encryption_response(
+        &mut self,
+        response: login::serverbound::EncryptionResponse,
+    ) -> Result<()> {
+        match &self.verify_token {
+            Some (token) => {
+                match &self.rsa_private_key {
+                    Some (private_key) => {
+                        if &encrypt::decrypt_rsa(
+                            &private_key,
+                            response.verify_token.as_slice()
+                        )? == token {
+                            self.aes_encryption_key =
+                                Some(encrypt::decrypt_rsa(
+                                    &private_key,
+                                    response.shared_secret.as_slice()
+                                )?[0..16].try_into().unwrap());
+                            Ok(())
+                        } else {
+                            Err(Box::new(PacketError::EncryptionError))
+                        }
+                    }
+                    None => Err(Box::new(PacketError::EncryptionError))
+                }
+            }
+            None => Err(Box::new(PacketError::EncryptionError))
+        }
+    }
+}
+
 #[async_trait]
 pub trait Packet: Sized {
     fn packet_id() -> i32;
     fn get(data: &mut Vec<u8>) -> Result<Self>;
     fn convert(&self) -> Vec<u8>;
 
-    async fn read(stream: &mut OwnedReadHalf) -> Result<Self> {
-        let mut data = read_data(stream).await?;
+    async fn read(conn: &mut ProtocolConnection<'_>) -> Result<Self> {
+        let mut data = conn.read_data().await?;
         let packet_id = get_var_int(&mut data)?;
         if packet_id == Self::packet_id() {
             return Ok(Self::get(&mut data)?)
@@ -59,35 +239,33 @@ pub trait Packet: Sized {
         }
     }
 
-    async fn write(&self, stream: &mut OwnedWriteHalf) -> Result<()> {
-        write_data(stream, &mut self.convert()).await
+    async fn write(&self, conn: &mut ProtocolConnection<'_>) -> Result<()> {
+        conn.write_data(&mut self.convert()).await
     }
 }
 
-pub async fn read_data(stream: &mut OwnedReadHalf) -> Result<Vec<u8>> {
-    let length = read_var_int_stream(stream).await? as usize;
-
-    let mut buffer: Vec<u8> = vec![0; length];
-    stream.read_exact(&mut buffer).await?;
-
-    Ok(buffer)
-}
-pub async fn write_data(
-    stream: &mut OwnedWriteHalf,
-    data: &mut Vec<u8>,
-) -> Result<()> {
-    let mut out_data = convert_var_int(data.len() as i32);
-    out_data.append(data);
-
-    stream.write_all(&out_data).await?;
-
-    Ok(())
-}
 async fn read_var_int_stream(stream: &mut OwnedReadHalf) -> Result<i32> {
     let mut data: Vec<u8> = vec![];
 
     loop {
         let current_byte = stream.read_u8().await?;
+
+        data.append(&mut vec![current_byte]);
+
+        if (current_byte & CONTINUE_BIT) == 0 {
+            break;
+        }
+    }
+
+    let varint = get_var_int(&mut data)?;
+
+    Ok(varint)
+}
+fn read_var_int_vec(stream: &mut Vec<u8>) -> Result<i32> {
+    let mut data: Vec<u8> = vec![];
+
+    loop {
+        let current_byte = stream.remove(0);
 
         data.append(&mut vec![current_byte]);
 
