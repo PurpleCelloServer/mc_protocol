@@ -13,6 +13,7 @@ use rand::Rng;
 
 use crate::login;
 use crate::encrypt;
+use crate::play::Play;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -233,6 +234,18 @@ impl<'a> ProtocolConnection<'a> {
                 }
             }
             None => Err(Box::new(PacketError::EncryptionError))
+        }
+    }
+
+    pub async fn forward_play(
+        &mut self,
+        other: &mut ProtocolConnection<'_>,
+    ) -> Result<()> {
+        loop {
+            let packet = Play::read(self).await?;
+            match packet {
+                Play::PlayPacket(packet) => packet.write(other).await?,
+            };
         }
     }
 }
