@@ -67,7 +67,7 @@ pub trait ProtocolWrite {
 pub struct ProtocolConnection<'a> {
     pub stream_read: &'a mut OwnedReadHalf,
     pub stream_write: &'a mut OwnedWriteHalf,
-    rsa_private_key: Option<&'a RsaPrivateKey>,
+    rsa_private_key: Option<RsaPrivateKey>,
     rsa_public_key: Option<RsaPublicKey>,
     aes_encryption_key: Option<[u8; 16]>,
     verify_token: Option<[u8; 16]>,
@@ -90,12 +90,12 @@ impl<'a> ProtocolConnection<'a> {
 
     pub fn create_encryption_request(
         &mut self,
-        private_key: &'a RsaPrivateKey,
+        private_key: RsaPrivateKey,
     ) -> Result<login::clientbound::EncryptionRequest> {
         match self.rsa_private_key {
             Some(_) => {},
             None => {
-                let public_key = RsaPublicKey::from(private_key);
+                let public_key = RsaPublicKey::from(&private_key);
                 let mut rng = rand::thread_rng();
                 self.rsa_private_key = Some(private_key);
                 self.rsa_public_key = Some(public_key);
@@ -123,7 +123,7 @@ impl<'a> ProtocolConnection<'a> {
 
     pub fn handle_encryption_request(
         &mut self,
-        request: &login::clientbound::EncryptionRequest,
+        request: login::clientbound::EncryptionRequest,
     ) -> Result<login::serverbound::EncryptionResponse> {
         self.rsa_public_key = Some(
             RsaPublicKey::from_public_key_der(&request.public_key)?);
@@ -153,7 +153,7 @@ impl<'a> ProtocolConnection<'a> {
 
     pub fn handle_encryption_response(
         &mut self,
-        response: &login::serverbound::EncryptionResponse,
+        response: login::serverbound::EncryptionResponse,
     ) -> Result<()> {
         match &self.verify_token {
             Some (token) => {
