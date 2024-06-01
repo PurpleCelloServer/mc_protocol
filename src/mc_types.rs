@@ -4,6 +4,7 @@ use std::error::Error;
 use std::fmt;
 
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
@@ -193,15 +194,15 @@ impl<'a> ProtocolConnection<'a> {
 
     pub fn split_conn(
         &mut self
-    ) -> (WriteHaftProtocolConnection, ReadHaftProtocolConnection) {
-        (WriteHaftProtocolConnection {
-            stream_write: self.stream_write,
-            aes_encryption_key: self.aes_encryption_key,
+    ) -> Result<(WriteHaftProtocolConnection, ReadHaftProtocolConnection)> {
+        Ok((WriteHaftProtocolConnection {
+            stream_write: &mut self.stream_write,
+            aes_encryption_key: self.aes_encryption_key.clone(),
         },
         ReadHaftProtocolConnection {
-            stream_read: self.stream_read,
-            aes_encryption_key: self.aes_encryption_key,
-        })
+            stream_read: &mut self.stream_read,
+            aes_encryption_key: self.aes_encryption_key.clone(),
+        }))
     }
 }
 
