@@ -13,8 +13,8 @@ pub mod clientbound {
     }
 
     impl Login {
-        pub async fn read(
-            conn: &mut mc_types::ProtocolConnection<'_>,
+        pub async fn read<T: mc_types::ProtocolRead>(
+            conn: &mut T,
         ) -> Result<Self> {
             let mut data = conn.read_data().await?;
             let packet_id = mc_types::get_var_int(&mut data)?;
@@ -241,8 +241,8 @@ pub mod serverbound {
     }
 
     impl Login {
-        pub async fn read(
-            conn: &mut mc_types::ProtocolConnection<'_>,
+        pub async fn read<T: mc_types::ProtocolRead>(
+            conn: &mut T,
         ) -> Result<Self> {
             let mut data = conn.read_data().await?;
             let packet_id = mc_types::get_var_int(&mut data)?;
