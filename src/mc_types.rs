@@ -4,13 +4,14 @@ use std::error::Error;
 use std::fmt;
 
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use serde::{Serialize, Deserialize};
 use async_trait::async_trait;
 use rsa::{RsaPrivateKey, RsaPublicKey};
 use rsa::pkcs8::{EncodePublicKey, DecodePublicKey};
 use rand::Rng;
+use aes::Aes128;
+use aes::cipher::{NewBlockCipher, generic_array::GenericArray};
 
 use crate::login;
 use crate::encrypt;
@@ -70,6 +71,7 @@ pub struct ProtocolConnection<'a> {
     rsa_private_key: Option<RsaPrivateKey>,
     rsa_public_key: Option<RsaPublicKey>,
     aes_encryption_key: Option<[u8; 16]>,
+    aes_cipher: Option<Aes128>,
     verify_token: Option<[u8; 16]>,
 }
 
@@ -84,6 +86,7 @@ impl<'a> ProtocolConnection<'a> {
             rsa_private_key: None,
             rsa_public_key: None,
             aes_encryption_key: None,
+            aes_cipher: None,
             verify_token: None,
         }
     }
@@ -128,7 +131,9 @@ impl<'a> ProtocolConnection<'a> {
         self.rsa_public_key = Some(
             RsaPublicKey::from_public_key_der(&request.public_key)?);
         let mut rng = rand::thread_rng();
-        self.aes_encryption_key = Some(rng.gen());
+        let aes_key = rng.gen();
+        self.aes_encryption_key = Some(aes_key);
+        self.aes_cipher = Some(Aes128::new(GenericArray::from_slice(&aes_key)));
         match self.aes_encryption_key {
             Some(key) => {
                 match &self.rsa_public_key {
@@ -197,11 +202,11 @@ impl<'a> ProtocolConnection<'a> {
     ) -> Result<(WriteHaftProtocolConnection, ReadHaftProtocolConnection)> {
         Ok((WriteHaftProtocolConnection {
             stream_write: &mut self.stream_write,
-            aes_encryption_key: self.aes_encryption_key.clone(),
+            aes_cipher: self.aes_cipher.clone(),
         },
         ReadHaftProtocolConnection {
             stream_read: &mut self.stream_read,
-            aes_encryption_key: self.aes_encryption_key.clone(),
+            aes_cipher: self.aes_cipher.clone(),
         }))
     }
 }
@@ -211,12 +216,12 @@ unsafe impl<'a> Send for ProtocolConnection<'a> {}
 #[async_trait]
 impl<'a> ProtocolRead for ProtocolConnection<'a> {
     async fn read_data(&mut self) -> Result<Vec<u8>> {
-        match self.aes_encryption_key {
-            Some(aes_key) => {
+        match self.aes_cipher.clone() {
+            Some(aes_cipher) => {
                 let mut buffer: Vec<u8> = vec![0; 16];
                 self.stream_read.read_exact(&mut buffer).await?;
                 buffer = encrypt::decrypt_aes(
-                    &aes_key, buffer[0..16].try_into().unwrap());
+                    aes_cipher, buffer[0..16].try_into().unwrap());
                 let raw_length = read_var_int_vec(&mut buffer)?;
                 let length =
                     if (raw_length - buffer.len() as i32) % 16 == 0 {
@@ -251,8 +256,8 @@ impl<'a> ProtocolWrite for ProtocolConnection<'a> {
     async fn write_data(&mut self, data: &mut Vec<u8>) -> Result<()> {
         let mut out_data = convert_var_int(data.len() as i32);
         out_data.append(data);
-        match self.aes_encryption_key {
-            Some(aes_key) => {
+        match self.aes_cipher.clone() {
+            Some(aes_cipher) => {
                 let length =
                     if (data.len() as i32) % 16 == 0 {
                         (data.len() as i32) / 16
@@ -263,7 +268,7 @@ impl<'a> ProtocolWrite for ProtocolConnection<'a> {
                 for _ in 0..length {
                     let mut block: Vec<u8> = out_data[0..16].to_vec();
                     block = encrypt::encrypt_aes(
-                        &aes_key, block[0..16].try_into().unwrap());
+                        aes_cipher.clone(), block[0..16].try_into().unwrap());
                     self.stream_write.write_all(&block).await?;
                 }
 
@@ -280,7 +285,7 @@ impl<'a> ProtocolWrite for ProtocolConnection<'a> {
 
 pub struct WriteHaftProtocolConnection<'a> {
     pub stream_write: &'a mut OwnedWriteHalf,
-    aes_encryption_key: Option<[u8; 16]>,
+    aes_cipher: Option<Aes128>,
 }
 
 impl<'a> WriteHaftProtocolConnection<'a> {
@@ -289,7 +294,7 @@ impl<'a> WriteHaftProtocolConnection<'a> {
     ) -> Self {
         WriteHaftProtocolConnection {
             stream_write,
-            aes_encryption_key: None,
+            aes_cipher: None,
         }
     }
 }
@@ -304,8 +309,8 @@ impl<'a> ProtocolWrite for WriteHaftProtocolConnection<'a> {
     ) -> Result<()> {
         let mut out_data = convert_var_int(data.len() as i32);
         out_data.append(data);
-        match self.aes_encryption_key {
-            Some(aes_key) => {
+        match self.aes_cipher.clone() {
+            Some(aes_cipher) => {
                 let length =
                     if (data.len() as i32) % 16 == 0 {
                         (data.len() as i32) / 16
@@ -316,7 +321,7 @@ impl<'a> ProtocolWrite for WriteHaftProtocolConnection<'a> {
                 for _ in 0..length {
                     let mut block: Vec<u8> = out_data[0..16].to_vec();
                     block = encrypt::encrypt_aes(
-                        &aes_key, block[0..16].try_into().unwrap());
+                        aes_cipher.clone(), block[0..16].try_into().unwrap());
                     self.stream_write.write_all(&block).await?;
                 }
 
@@ -334,7 +339,7 @@ impl<'a> ProtocolWrite for WriteHaftProtocolConnection<'a> {
 
 pub struct ReadHaftProtocolConnection<'a> {
     pub stream_read: &'a mut OwnedReadHalf,
-    aes_encryption_key: Option<[u8; 16]>,
+    aes_cipher: Option<Aes128>,
 }
 
 impl<'a> ReadHaftProtocolConnection<'a> {
@@ -343,7 +348,7 @@ impl<'a> ReadHaftProtocolConnection<'a> {
     ) -> Self {
         ReadHaftProtocolConnection {
             stream_read,
-            aes_encryption_key: None,
+            aes_cipher: None,
         }
     }
 
@@ -365,12 +370,12 @@ unsafe impl<'a> Send for ReadHaftProtocolConnection<'a> {}
 #[async_trait]
 impl<'a> ProtocolRead for ReadHaftProtocolConnection<'a> {
     async fn read_data(&mut self) -> Result<Vec<u8>> {
-        match self.aes_encryption_key {
-            Some(aes_key) => {
+        match self.aes_cipher.clone() {
+            Some(aes_cipher) => {
                 let mut buffer: Vec<u8> = vec![0; 16];
                 self.stream_read.read_exact(&mut buffer).await?;
                 buffer = encrypt::decrypt_aes(
-                    &aes_key, buffer[0..16].try_into().unwrap());
+                    aes_cipher, buffer[0..16].try_into().unwrap());
                 let raw_length = read_var_int_vec(&mut buffer)?;
                 let length =
                     if (raw_length - buffer.len() as i32) % 16 == 0 {
