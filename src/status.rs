@@ -26,6 +26,7 @@ pub mod clientbound {
         pub sample: Option<Vec<StatusPlayerInfo>>
     }
 
+    #[allow(non_snake_case)]
     #[derive(Serialize, Deserialize)]
     pub struct StatusResponseData {
         pub version: StatusVersion,
