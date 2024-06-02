@@ -28,6 +28,7 @@ pub enum PacketError {
     ValueTooLarge,
     RanOutOfBytes,
     InvalidPacketId,
+    InvalidUUIDString,
     EncryptionError,
 }
 
@@ -40,6 +41,8 @@ impl fmt::Display for PacketError {
                 write!(f, "Ran out of bytes while reading VarInt"),
             PacketError::InvalidPacketId =>
                 write!(f, "Invalid packet id"),
+            PacketError::InvalidUUIDString =>
+                write!(f, "Invalid UUID format"),
             PacketError::EncryptionError =>
                 write!(f, "Encryption Error"),
         }
@@ -405,23 +408,6 @@ async fn read_var_int_stream_encrypted(
 
     Ok(varint)
 }
-fn read_var_int_vec(stream: &mut Vec<u8>) -> Result<i32> {
-    let mut data: Vec<u8> = vec![];
-
-    loop {
-        let current_byte = stream.remove(0);
-
-        data.append(&mut vec![current_byte]);
-
-        if (current_byte & CONTINUE_BIT) == 0 {
-            break;
-        }
-    }
-
-    let varint = get_var_int(&mut data)?;
-
-    Ok(varint)
-}
 
 pub trait PacketArray: Sized {
     fn get(data: &mut Vec<u8>) -> Result<Self>;
@@ -588,6 +574,38 @@ pub fn convert_uuid(value: u128) -> Vec<u8> {
         ((value & 0xFF00) >> 8) as u8,
         (value & 0xFF) as u8,
     ]
+}
+pub fn uuid_u128_to_string(uuid: u128) -> String {
+    let uuid_bytes = convert_uuid(uuid);
+    format!(
+        "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+        get_u32(&mut vec![
+            uuid_bytes[0],
+            uuid_bytes[1],
+            uuid_bytes[2],
+            uuid_bytes[3],
+        ]),
+        get_u16(&mut vec![uuid_bytes[4], uuid_bytes[5]]),
+        get_u16(&mut vec![uuid_bytes[6], uuid_bytes[7]]),
+        get_u16(&mut vec![uuid_bytes[8], uuid_bytes[9]]),
+        get_u64(&mut vec![
+            0,
+            0,
+            uuid_bytes[10],
+            uuid_bytes[11],
+            uuid_bytes[12],
+            uuid_bytes[13],
+            uuid_bytes[14],
+            uuid_bytes[15],
+        ]),
+    )
+}
+pub fn uuid_string_to_u128(uuid: &str) -> Result<u128> {
+    let cleaned_uuid = uuid.replace("-", "");
+    if cleaned_uuid.len() != 32 {
+        return Err(Box::new(PacketError::InvalidUUIDString));
+    }
+    Ok(u128::from_str_radix(&cleaned_uuid, 16)?)
 }
 
 pub fn get_var_int(data: &mut Vec<u8>) -> Result<i32> {
