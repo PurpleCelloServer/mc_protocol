@@ -10,6 +10,9 @@ use async_trait::async_trait;
 use rsa::{RsaPrivateKey, RsaPublicKey};
 use rsa::pkcs8::{EncodePublicKey, DecodePublicKey};
 use rand::Rng;
+use crypto::digest::Digest;
+use sha1::Sha1;
+use num_bigint::BigInt;
 
 use crate::login;
 use crate::encrypt::{self, McCipher};
@@ -73,6 +76,7 @@ pub struct ProtocolConnection<'a> {
     rsa_public_key: Option<RsaPublicKey>,
     aes_cipher: Option<McCipher>,
     verify_token: Option<[u8; 16]>,
+    server_id: String
 }
 
 impl<'a> ProtocolConnection<'a> {
@@ -87,6 +91,7 @@ impl<'a> ProtocolConnection<'a> {
             rsa_public_key: None,
             aes_cipher: None,
             verify_token: None,
+            server_id: "".to_string(),
         }
     }
 
@@ -109,7 +114,7 @@ impl<'a> ProtocolConnection<'a> {
                 match &self.verify_token {
                     Some (token) =>
                         Ok(login::clientbound::EncryptionRequest {
-                            server_id: "".to_string(),
+                            server_id: self.server_id.clone(),
                             public_key: key
                                 .to_public_key_der()?
                                 .as_ref()
@@ -127,6 +132,7 @@ impl<'a> ProtocolConnection<'a> {
         &mut self,
         request: login::clientbound::EncryptionRequest,
     ) -> Result<login::serverbound::EncryptionResponse> {
+        self.server_id = request.server_id;
         self.rsa_public_key = Some(
             RsaPublicKey::from_public_key_der(&request.public_key)?);
         self.aes_cipher = Some(McCipher::create());
@@ -204,6 +210,23 @@ impl<'a> ProtocolConnection<'a> {
             stream_read: &mut self.stream_read,
             aes_cipher: self.aes_cipher.clone(),
         }))
+    }
+
+    pub async fn server_id_hash(&self) -> Result<String> {
+        let hash_data = match &self.aes_cipher {
+            Some(aes_cipher) => match &self.rsa_public_key {
+                Some(key) => [
+                    self.server_id.as_bytes(),
+                    &aes_cipher.key,
+                    key.to_public_key_der()?.as_ref(),
+                ].concat(),
+                None => return Err(Box::new(PacketError::EncryptionError))
+            },
+            None => return Err(Box::new(PacketError::EncryptionError))
+        };
+        let hash = BigInt::from_signed_bytes_be(
+            &Sha1::digest(hash_data)).to_str_radix(16);
+        Ok(hash)
     }
 }
 

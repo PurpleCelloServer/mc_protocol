@@ -16,3 +16,6 @@ rand = "0.8.5"
 aes = "0.7"
 rsa = "0.6"
 pkcs8 = "0.8"
+crypto = { version = "0.5.1", features = ["digest"] }
+sha1 = "0.10.6"
+num-bigint = "0.4.5"

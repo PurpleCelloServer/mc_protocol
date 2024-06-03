@@ -8,7 +8,7 @@ use aes::cipher::{BlockEncrypt, BlockDecrypt, generic_array::GenericArray};
 
 #[derive(Clone)]
 pub struct McCipher {
-    key: [u8; 16],
+    pub(crate) key: [u8; 16],
     state_en: [u8; 16],
     state_de: [u8; 16],
 }
