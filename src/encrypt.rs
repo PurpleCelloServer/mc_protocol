@@ -61,27 +61,27 @@ impl McCipher {
     }
 
     fn shift_left(mut arr: [u8; 16], new: u8) {
-        for i in 1..arr.len() {
-            arr[i] = arr[i - 1];
+        for i in 0..arr.len() + 1 {
+            arr[i] = arr[i + 1];
         }
-        arr[0] = new;
+        arr[15] = new;
     }
 
     fn encrypt_block(&self, data: u8) -> u8 {
         let cipher = Aes128::new(GenericArray::from_slice(&self.key));
         let mut block = GenericArray::clone_from_slice(&self.state_en);
         cipher.encrypt_block(&mut block);
-        let data = data ^ block[15];
+        let data = data ^ block[0];
         Self::shift_left(self.state_en, data);
         data
     }
 
     fn decrypt_block(&self, data: u8) -> u8 {
         let cipher = Aes128::new(GenericArray::from_slice(&self.key));
-        let mut block = GenericArray::clone_from_slice(&self.state_en);
+        let mut block = GenericArray::clone_from_slice(&self.state_de);
         cipher.decrypt_block(&mut block);
         Self::shift_left(self.state_de, data);
-        let data = data ^ block[15];
+        let data = data ^ block[0];
         data
     }
 }
