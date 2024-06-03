@@ -235,7 +235,7 @@ unsafe impl<'a> Send for ProtocolConnection<'a> {}
 #[async_trait]
 impl<'a> ProtocolRead for ProtocolConnection<'a> {
     async fn read_data(&mut self) -> Result<Vec<u8>> {
-        match &self.aes_cipher {
+        match &mut self.aes_cipher {
             Some(aes_cipher) => {
                 let length = read_var_int_stream_encrypted(
                     self.stream_read, aes_cipher).await? as usize;
@@ -262,7 +262,7 @@ impl<'a> ProtocolWrite for ProtocolConnection<'a> {
     async fn write_data(&mut self, data: &mut Vec<u8>) -> Result<()> {
         let mut out_data = convert_var_int(data.len() as i32);
         out_data.append(data);
-        match &self.aes_cipher {
+        match &mut self.aes_cipher {
             Some(aes_cipher) => {
                 self.stream_write.write_all(
                     &aes_cipher.encrypt_aes(out_data)).await?;
@@ -301,7 +301,7 @@ impl<'a> ProtocolWrite for WriteHaftProtocolConnection<'a> {
     async fn write_data(&mut self, data: &mut Vec<u8>) -> Result<()> {
         let mut out_data = convert_var_int(data.len() as i32);
         out_data.append(data);
-        match &self.aes_cipher {
+        match &mut self.aes_cipher {
             Some(aes_cipher) => {
                 self.stream_write.write_all(
                     &aes_cipher.encrypt_aes(out_data)).await?;
@@ -350,7 +350,7 @@ unsafe impl<'a> Send for ReadHaftProtocolConnection<'a> {}
 #[async_trait]
 impl<'a> ProtocolRead for ReadHaftProtocolConnection<'a> {
     async fn read_data(&mut self) -> Result<Vec<u8>> {
-        match &self.aes_cipher {
+        match &mut self.aes_cipher {
             Some(aes_cipher) => {
                 let length = read_var_int_stream_encrypted(
                     self.stream_read, aes_cipher).await? as usize;
@@ -412,17 +412,17 @@ async fn read_var_int_stream(stream: &mut OwnedReadHalf) -> Result<i32> {
 }
 async fn read_var_int_stream_encrypted(
     stream: &mut OwnedReadHalf,
-    cipher: &McCipher,
+    cipher: &mut McCipher,
 ) -> Result<i32> {
     let mut data: Vec<u8> = vec![];
 
     loop {
         let encrypted_byte = stream.read_u8().await?;
-        let mut current_byte = cipher.decrypt_aes(vec![encrypted_byte]);
+        let current_byte = cipher.decrypt_aes(vec![encrypted_byte])[0];
 
-        data.append(&mut current_byte);
+        data.append(&mut vec![current_byte]);
 
-        if (current_byte[0] & CONTINUE_BIT) == 0 {
+        if (current_byte & CONTINUE_BIT) == 0 {
             break;
         }
     }
