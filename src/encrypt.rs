@@ -9,8 +9,8 @@ use aes::cipher::{BlockEncrypt, BlockDecrypt, generic_array::GenericArray};
 #[derive(Clone)]
 pub struct McCipher {
     pub(crate) key: [u8; 16],
-    state_en: [u8; 16],
-    state_de: [u8; 16],
+    state_en: u128,
+    state_de: u128,
 }
 
 impl McCipher {
@@ -19,8 +19,8 @@ impl McCipher {
         let aes_key: [u8; 16] = rng.gen();
         Self {
             key: aes_key.clone(),
-            state_en: aes_key.clone(),
-            state_de: aes_key.clone(),
+            state_en: u128::from_be_bytes(aes_key),
+            state_de: u128::from_be_bytes(aes_key),
         }
     }
 
@@ -37,19 +37,10 @@ impl McCipher {
     ) -> Result<Self> {
         let aes_key: [u8; 16] = decrypt_rsa(private_key, data)?
             .as_slice()[0..16].try_into().unwrap();
-        let mut key: [u8; 16] =
-            vec![0;16].as_slice()[0..16].try_into().unwrap();
-        key.copy_from_slice(&aes_key);
-        let mut state_en: [u8; 16] =
-            vec![0;16].as_slice()[0..16].try_into().unwrap();
-        state_en.copy_from_slice(&aes_key);
-        let mut state_de: [u8; 16] =
-            vec![0;16].as_slice()[0..16].try_into().unwrap();
-        state_de.copy_from_slice(&aes_key);
         Ok(Self {
-            key,
-            state_en,
-            state_de,
+            key: aes_key.clone(),
+            state_en: u128::from_be_bytes(aes_key),
+            state_de: u128::from_be_bytes(aes_key),
         })
     }
 
@@ -69,31 +60,22 @@ impl McCipher {
         out_data
     }
 
-    fn shift_left(arr: [u8; 16], new: u8) -> [u8; 16] {
-        let mut arr = arr;
-        for i in 0..arr.len() - 1 {
-            arr[i] = arr[i + 1];
-        }
-        arr[15] = new;
-        arr
-    }
-
     fn encrypt_block(&mut self, data: u8) -> u8 {
         let cipher = Aes128::new(GenericArray::from_slice(&self.key));
-        let mut block = GenericArray::clone_from_slice(&self.state_en);
+        let mut block = GenericArray::clone_from_slice(
+            &self.state_en.to_be_bytes());
         cipher.encrypt_block(&mut block);
         let data = data ^ block[0];
-        self.state_en = Self::shift_left(self.state_en, data);
-        assert_ne!(self.state_en, self.key);
-        assert_ne!(self.state_en, self.state_de);
+        self.state_en = (self.state_en << 8) + (data as u128);
         data
     }
 
     fn decrypt_block(&mut self, data: u8) -> u8 {
         let cipher = Aes128::new(GenericArray::from_slice(&self.key));
-        let mut block = GenericArray::clone_from_slice(&self.state_de);
+        let mut block = GenericArray::clone_from_slice(
+            &self.state_de.to_be_bytes());
         cipher.decrypt_block(&mut block);
-        self.state_de = Self::shift_left(self.state_de, data);
+        self.state_de = (self.state_de << 8) + (data as u128);
         let data = data ^ block[0];
         data
     }
