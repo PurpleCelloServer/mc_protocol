@@ -61,7 +61,7 @@ impl McCipher {
     }
 
     fn shift_left(mut arr: [u8; 16], new: u8) {
-        for i in 0..arr.len() + 1 {
+        for i in 0..arr.len() - 1 {
             arr[i] = arr[i + 1];
         }
         arr[15] = new;
