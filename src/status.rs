@@ -2,7 +2,9 @@
 
 pub mod clientbound {
 
-    use serde::{Serialize, Deserialize};
+    use serde::{Serialize, Deserialize, Deserializer};
+    use serde::de::{self, Visitor, MapAccess};
+    use std::fmt;
 
     use crate::mc_types::{self, Result, Packet, PacketError};
 
@@ -12,11 +14,49 @@ pub mod clientbound {
         pub protocol: i32,
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize)]
     pub enum StatusDescription {
         String(String),
         Chat(mc_types::Chat),
     }
+
+    impl<'de> Deserialize<'de> for StatusDescription {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct StatusDescriptionVisitor;
+
+        impl<'de> Visitor<'de> for StatusDescriptionVisitor {
+            type Value = StatusDescription;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(
+                    "a string or a map representing a Chat object")
+            }
+
+            fn visit_str<E>(self, value: &str)
+                -> std::result::Result<StatusDescription, E>
+            where
+                E: de::Error,
+            {
+                Ok(StatusDescription::String(value.to_string()))
+            }
+
+            fn visit_map<M>(self, map: M)
+                -> std::result::Result<StatusDescription, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let chat = mc_types::Chat::deserialize(
+                    de::value::MapAccessDeserializer::new(map))?;
+                Ok(StatusDescription::Chat(chat))
+            }
+        }
+
+        deserializer.deserialize_any(StatusDescriptionVisitor)
+    }
+}
 
     #[derive(Serialize, Deserialize)]
     pub struct StatusPlayerInfo {
