@@ -10,6 +10,7 @@ pub mod clientbound {
         LoginSuccess(LoginSuccess),
         SetCompression(SetCompression),
         PluginRequest(PluginRequest),
+        CookieRequest(CookieRequest),
     }
 
     impl Login {
@@ -31,6 +32,9 @@ pub mod clientbound {
             } else if packet_id == PluginRequest::packet_id() {
                 return Ok(Self::PluginRequest(
                     PluginRequest::get(&mut data)?))
+            } else if packet_id == CookieRequest::packet_id() {
+                return Ok(Self::CookieRequest(
+                    CookieRequest::get(&mut data)?))
             } else {
                 return Err(Box::new(PacketError::InvalidPacketId))
             }
@@ -97,6 +101,7 @@ pub mod clientbound {
         pub uuid: u128,
         pub username: String,
         pub properties: Vec<LoginSuccessProperty>,
+        pub strict_error_handling: bool,
     }
 
     impl Packet for LoginSuccess {
@@ -108,6 +113,7 @@ pub mod clientbound {
                 uuid: mc_types::get_uuid(&mut data),
                 username: mc_types::get_string(&mut data)?,
                 properties: LoginSuccessProperty::get_array(&mut data)?,
+                strict_error_handling: mc_types::get_bool(&mut data),
             })
         }
 
@@ -118,6 +124,8 @@ pub mod clientbound {
             data.append(&mut mc_types::convert_string(&self.username));
             data.append(&mut LoginSuccessProperty::convert_array(
                 &mut self.properties.clone()));
+            data.append(&mut mc_types::convert_bool(
+                self.strict_error_handling));
 
             data
         }
@@ -228,6 +236,30 @@ pub mod clientbound {
 
     }
 
+    pub struct CookieRequest {
+        pub key: String,
+    }
+
+    impl Packet for CookieRequest {
+
+        fn packet_id() -> i32 {5}
+
+        fn get(mut data: &mut Vec<u8>) -> Result<Self> {
+            Ok(Self {
+                key: mc_types::get_string(&mut data)?,
+            })
+        }
+
+        fn convert(&self) -> Vec<u8> {
+            let mut data: Vec<u8> = vec![];
+            data.append(&mut mc_types::convert_var_int(Self::packet_id()));
+            data.append(&mut mc_types::convert_string(&self.key));
+
+            data
+        }
+
+    }
+
 }
 
 pub mod serverbound {
@@ -238,6 +270,8 @@ pub mod serverbound {
         LoginStart(LoginStart),
         EncryptionResponse(EncryptionResponse),
         PluginResponse(PluginResponse),
+        Acknowledged(Acknowledged),
+        CookieResponse(CookieResponse),
     }
 
     impl Login {
@@ -254,6 +288,12 @@ pub mod serverbound {
             } else if packet_id == PluginResponse::packet_id() {
                 return Ok(Self::PluginResponse(
                     PluginResponse::get(&mut data)?))
+            } else if packet_id == Acknowledged::packet_id() {
+                return Ok(Self::Acknowledged(
+                    Acknowledged::get(&mut data)?))
+            } else if packet_id == CookieResponse::packet_id() {
+                return Ok(Self::CookieResponse(
+                    CookieResponse::get(&mut data)?))
             } else {
                 return Err(Box::new(PacketError::InvalidPacketId))
             }
@@ -352,6 +392,58 @@ pub mod serverbound {
             data.append(&mut mc_types::convert_var_int(self.message_id));
             data.append(&mut mc_types::convert_bool(self.successful));
             data.append(&mut self.data.clone());
+
+            data
+        }
+
+    }
+
+    pub struct Acknowledged {}
+
+    impl Packet for Acknowledged {
+
+        fn packet_id() -> i32 {3}
+
+        fn get(_data: &mut Vec<u8>) -> Result<Self> {
+            Ok(Self {})
+        }
+
+        fn convert(&self) -> Vec<u8> {
+            let mut data: Vec<u8> = vec![];
+            data.append(&mut mc_types::convert_var_int(Self::packet_id()));
+
+            data
+        }
+
+    }
+
+    pub struct CookieResponse {
+        pub key: String,
+        pub has_payload: bool,
+        pub payload_load: i32,
+        pub payload: Vec<u8>,
+    }
+
+    impl Packet for CookieResponse {
+
+        fn packet_id() -> i32 {4}
+
+        fn get(mut data: &mut Vec<u8>) -> Result<Self> {
+            Ok(Self {
+                key: mc_types::get_string(&mut data)?,
+                has_payload: mc_types::get_bool(&mut data),
+                payload_load: mc_types::get_var_int(&mut data)?,
+                payload: data.clone(),
+            })
+        }
+
+        fn convert(&self) -> Vec<u8> {
+            let mut data: Vec<u8> = vec![];
+            data.append(&mut mc_types::convert_var_int(Self::packet_id()));
+            data.append(&mut mc_types::convert_string(&self.key));
+            data.append(&mut mc_types::convert_bool(self.has_payload));
+            data.append(&mut mc_types::convert_var_int(self.payload_load));
+            data.append(&mut self.payload.clone());
 
             data
         }

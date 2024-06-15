@@ -20,8 +20,8 @@ use crate::play::Play;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-pub const VERSION_NAME: &str = "1.19.4";
-pub const VERSION_PROTOCOL: i32 = 762;
+pub const VERSION_NAME: &str = "1.21";
+pub const VERSION_PROTOCOL: i32 = 767;
 
 const SEGMENT_BITS: u8 = 0x7F;
 const CONTINUE_BIT: u8 = 0x80;
