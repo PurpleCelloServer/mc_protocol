@@ -13,6 +13,12 @@ pub mod clientbound {
     }
 
     #[derive(Serialize, Deserialize)]
+    pub enum StatusDescription {
+        String(String),
+        Chat(mc_types::Chat),
+    }
+
+    #[derive(Serialize, Deserialize)]
     pub struct StatusPlayerInfo {
         pub name: String,
         pub id: String,
@@ -30,7 +36,7 @@ pub mod clientbound {
     #[derive(Serialize, Deserialize)]
     pub struct StatusResponseData {
         pub version: StatusVersion,
-        pub description: mc_types::Chat,
+        pub description: StatusDescription,
         pub players: StatusPlayers,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub favicon: Option<String>,
