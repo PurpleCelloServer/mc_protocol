@@ -302,7 +302,7 @@ pub mod serverbound {
 
     pub struct LoginStart {
         pub name: String,
-        pub player_uuid: Option<u128>,
+        pub player_uuid: u128,
     }
 
     impl Packet for LoginStart {
@@ -311,11 +311,7 @@ pub mod serverbound {
 
         fn get(mut data: &mut Vec<u8>) -> Result<Self> {
             let name = mc_types::get_string(&mut data)?;
-            let has_uuid = mc_types::get_bool(&mut data);
-            let mut player_uuid: Option<u128> = None;
-            if has_uuid {
-                player_uuid = Some(mc_types::get_uuid(&mut data));
-            }
+            let player_uuid: u128 = mc_types::get_uuid(&mut data);
             Ok(Self {
                 name,
                 player_uuid,
@@ -326,13 +322,7 @@ pub mod serverbound {
             let mut data: Vec<u8> = vec![];
             data.append(&mut mc_types::convert_var_int(Self::packet_id()));
             data.append(&mut mc_types::convert_string(&self.name));
-            match self.player_uuid {
-                Some(value) => {
-                    data.append(&mut mc_types::convert_bool(true));
-                    data.append(&mut mc_types::convert_uuid(value));
-                },
-                None => data.append(&mut mc_types::convert_bool(false))
-            }
+            data.append(&mut mc_types::convert_uuid(self.player_uuid));
 
             data
         }
